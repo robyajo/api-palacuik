@@ -16,6 +16,7 @@ class DatabaseSeeder extends Seeder
         $this->call([
             DefaultUserSeeder::class,
             ProfileSeeder::class,
+            MarketPlaceSeeder::class,
         ]);
     }
 }

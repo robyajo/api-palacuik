@@ -5,10 +5,12 @@ namespace App\Http\Controllers;
 use App\Models\Profile;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
+use Tymon\JWTAuth\Facades\JWTAuth;
 
 class AuthController extends Controller
 {
@@ -57,6 +59,7 @@ class AuthController extends Controller
                 'user_id' => $user->id,
             ]);
 
+            $token = Auth::login($user);
             DB::commit();
             return response()->json([
                 'success' => true,
@@ -71,8 +74,9 @@ class AuthController extends Controller
                         'role' => $user->role,
                     ],
                     'access_token' => [
-                        'token' => $user->createToken($user->name)->plainTextToken,
+                        'token' =>  $token,
                         'token_type' => 'Bearer',
+                        'expires_in' => auth()->factory()->getTTL() * 60
                     ]
                 ],
             ], 201);
@@ -115,19 +119,20 @@ class AuthController extends Controller
 
         try {
             // Ambil user berdasarkan email
-            $user = User::where('email', $request->email)->first();
 
-            // Cek kredensial
-            if (!Hash::check($request->password, $user->password)) {
+            if (!$token = Auth::attempt($request->only('email', 'password'))) {
                 return response()->json([
-                    'success' => false,
                     'status' => 401,
-                    'message' => 'Alamat email atau password Anda salah',
+                    'success' => false,
+                    'message' => 'Email atau password yang Anda masukkan salah.',
                 ], 401);
             }
 
-            // Buat token akses
-            $token = $user->createToken($user->name)->plainTextToken;
+            // Get the authenticated user.
+            $user = Auth::user();
+
+            // (optional) Attach the role to the token.
+            $token = JWTAuth::claims(['role' => $user->email])->fromUser($user);
 
             return response()->json([
                 'success' => true,
@@ -144,6 +149,7 @@ class AuthController extends Controller
                     'access_token' => [
                         'token' => $token,
                         'token_type' => 'Bearer',
+                        'expires_in' => auth()->factory()->getTTL() * 60
                     ],
                 ],
             ], 200);
@@ -158,10 +164,33 @@ class AuthController extends Controller
             ], 500);
         }
     }
-    public function logout(Request $request)
+
+    public function refresh()
     {
         try {
-            $request->user()->tokens()->delete();
+            $token = Auth::refresh();
+            return response()->json([
+                'status' => 200,
+                'success' => true,
+                'message' => 'Token berhasil diperbarui',
+                'data' => [
+                    'access_token' => $token,
+                    'token_type' => 'Bearer',
+                ]
+            ]);
+        } catch (\Throwable $th) {
+            return response()->json([
+                'status' => 500,
+                'success' => false,
+                'message' => 'Gagal memperbarui token: ' . $th->getMessage(),
+                'data' => []
+            ], 500);
+        }
+    }
+    public function logout()
+    {
+        try {
+            Auth::logout();
             return response()->json([
                 'success' => true,
                 'status' => 200,
