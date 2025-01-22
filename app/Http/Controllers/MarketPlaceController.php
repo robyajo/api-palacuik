@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\MarketPlace;
+use Exception;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
@@ -141,7 +143,7 @@ class MarketPlaceController extends Controller
     public function update(Request $request, string $uuid)
     {
         try {
-            // Validasi input terlebih dahulu
+            // Validasi input
             $validator = Validator::make($request->all(), [
                 'name' => 'required|max:200',
                 'logo' => 'nullable|file|mimes:jpeg,png,jpg|max:2000',
@@ -166,23 +168,30 @@ class MarketPlaceController extends Controller
 
             if ($request->hasFile('logo')) {
                 // Hapus file lama jika ada
-                if ($fileName && file_exists(public_path('/assets/marketplace/logo/' . $fileName))) {
-                    unlink(public_path('/assets/marketplace/logo/' . $fileName));
+                $oldFilePath = public_path('assets/marketplace/logo/' . $fileName);
+                if ($fileName && file_exists($oldFilePath)) {
+                    unlink($oldFilePath);
                 }
 
-                $file = $request->file('file_voice');
+                $file = $request->file('logo'); // Fixed: Changed from 'file_voice' to 'logo'
                 $uploadPath = public_path('assets/marketplace/logo');
 
+                // Buat direktori jika belum ada
                 if (!file_exists($uploadPath)) {
                     mkdir($uploadPath, 0777, true);
                 }
 
-                $fileName = 'logo_' . $request->name . '_' . str()->random(10) . '.' . $file->getClientOriginalExtension();
+                // Generate nama file yang aman
+                $fileName = 'logo_' . str_replace(' ', '_', $request->name) . '_' . str()->random(10) . '.' . $file->getClientOriginalExtension();
+
+                // Pindahkan file
                 $file->move($uploadPath, $fileName);
 
+                // Generate URL path
                 $baseUrl = config('app.url');
                 $savePath = $baseUrl . '/assets/marketplace/logo/' . $fileName;
             }
+
             // Update data
             $data->update([
                 'name' => $request->name,
@@ -199,13 +208,13 @@ class MarketPlaceController extends Controller
                 'message' => 'Data berhasil diperbarui.',
                 'data' => $data
             ], 200);
-        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+        } catch (ModelNotFoundException $e) {
             return response()->json([
                 'success' => false,
                 'status' => 404,
                 'message' => 'Data tidak ditemukan.',
             ], 404);
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             Log::error('Error updating marketplace: ' . $e->getMessage());
             return response()->json([
                 'success' => false,

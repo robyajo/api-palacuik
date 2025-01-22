@@ -10,10 +10,77 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
+use Tymon\JWTAuth\Exceptions\JWTException;
+use Tymon\JWTAuth\Exceptions\TokenExpiredException;
+use Tymon\JWTAuth\Exceptions\TokenInvalidException;
 use Tymon\JWTAuth\Facades\JWTAuth;
 
 class AuthController extends Controller
 {
+    public function sessionCheck(Request $request)
+    {
+        try {
+            // Cek keberadaan token
+            if (!$request->bearerToken()) {
+                return response()->json([
+                    'success' => false,
+                    'status' => 401,
+                    'message' => 'Token tidak ditemukan'
+                ], 401);
+            }
+
+            // Validasi token dan ambil user
+            $token = JWTAuth::getToken();
+            $user = JWTAuth::authenticate($token);
+
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'status' => 401,
+                    'message' => 'User tidak ditemukan'
+                ], 401);
+            }
+
+            return response()->json([
+                'success' => true,
+                'status' => 200,
+                'message' => 'Session aktif',
+                'data' => [
+                    'user' => $user,
+                    'access_token' => [
+                        'token' => $token,
+                        'token_type' => 'Bearer',
+                        'expires_in' => auth()->factory()->getTTL() * 60
+                    ]
+                ]
+            ], 200);
+        } catch (TokenExpiredException $e) {
+            return response()->json([
+                'success' => false,
+                'status' => 401,
+                'message' => 'Token telah kadaluarsa'
+            ], 401);
+        } catch (TokenInvalidException $e) {
+            return response()->json([
+                'success' => false,
+                'status' => 401,
+                'message' => 'Token tidak valid'
+            ], 401);
+        } catch (JWTException $e) {
+            return response()->json([
+                'success' => false,
+                'status' => 401,
+                'message' => 'Token tidak bisa diproses'
+            ], 401);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'status' => 500,
+                'message' => 'Terjadi kesalahan saat memeriksa session',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
     public function register(Request $request)
     {
         $validator = Validator::make($request->all(), [
